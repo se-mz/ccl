@@ -480,7 +480,11 @@ function to the indicated name is true.")
   `(integer ,val ,val))
 
 (def-simple-type-infer infer-immediate immediate trust-decls (val)
-  (type-of val))
+  ;; TYPE-OF is very lazy for integers, but we can make really good use of
+  ;; accurate type inference for them.
+  (if (typep val 'integer)
+      `(integer ,val ,val)
+      (type-of val)))
 
 (def-simple-type-infer infer-progn progn trust-decls (forms)
   (acode-form-type (car (last forms)) trust-decls))
