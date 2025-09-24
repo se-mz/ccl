@@ -902,6 +902,7 @@
       (let* ((maxbits (target-word-size-case
                        (32 29)
                        (64 60)))
+             (natural-bits (arch::target-nbits-in-word (backend-target-arch *target-backend*)))
              (newtype nil)
              (cnum (acode-constant-p num))
              (camt (acode-constant-p amt))
@@ -939,10 +940,10 @@
                      (acode-operands w) (list amt num)
                      (acode.asserted-type w) nil))
               ((and (typep camt 'fixnum)
-                    (< 0 camt (arch::target-nbits-in-word
-                               (backend-target-arch *target-backend*)))
-                    (acode-form-typep num natural-type trust-decls)
-                    (subtypep asserted-type natural-type))
+                    (< 0 camt natural-bits)
+                    (or (acode-form-typep num `(unsigned-byte ,(- natural-bits camt)) trust-decls)
+                        (and (acode-form-typep num natural-type trust-decls)
+                             (subtypep asserted-type natural-type))))
                (setf (acode-operator w) (%nx1-operator natural-shift-left)
                      (acode.asserted-type w) nil))
               ((typep cnum 'fixnum)
