@@ -486,8 +486,28 @@ function to the indicated name is true.")
       `(integer ,val ,val)
       (type-of val)))
 
+(def-simple-type-infer infer-prog1 (prog1 multiple-value-prog1) trust-decls (forms)
+  (acode-form-type (car forms) trust-decls))
+
 (def-simple-type-infer infer-progn progn trust-decls (forms)
   (acode-form-type (car (last forms)) trust-decls))
+
+(def-simple-type-infer infer-progv progv trust-decls (symbols values forms)
+  (declare (ignore symbols values))
+  (acode-form-type (car (last forms)) trust-decls))
+
+(def-simple-type-infer infer-flet (flet labels) trust-decls (vars afuncs body p2decls)
+  (declare (ignore vars afuncs))
+  (acode-form-type body (logtest $decl_trustdecls p2decls)))
+
+(def-simple-type-infer infer-multiple-value-bind multiple-value-bind trust-decls (vars mvform body p2decls)
+  (declare (ignore vars mvform))
+  (acode-form-type body (logtest $decl_trustdecls p2decls)))
+
+(def-simple-type-infer infer-lambda-bind lambda-bind trust-decls
+    (vals req rest keys-p auxen body p2decls)
+  (declare (ignore vals req rest keys-p auxen))
+  (acode-form-type body (logtest $decl_trustdecls p2decls)))
 
 (def-simple-type-infer infer-typed-form typed-form trust-decls (&whole w type form &optional check)
   (declare (ignorable w form))
@@ -502,7 +522,7 @@ function to the indicated name is true.")
             (type-specifier intersection)))
       '*))
 
-(def-simple-type-infer infer-let (let let) trust-decls (vars vals body p2decls)
+(def-simple-type-infer infer-let (let let*) trust-decls (vars vals body p2decls)
   (declare (ignore vars vals))
   (acode-form-type body (logtest $decl_trustdecls p2decls)))
 
