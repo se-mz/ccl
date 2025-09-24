@@ -6433,42 +6433,56 @@
                 (x862-nlexit seg xfer numundo)
                 (^))
               (dotimes (i numundo) (x862-close-undo)))
-            (progn
-              ;; There are some cases where storing thru *x862-arg-z*
-              ;; can be avoided (stores to vlocs, specials, etc.) and
-              ;; some other case where it can't ($test, $vpush.)  The
-              ;; case of a null vd can certainly avoid it; the check
-              ;; of numundo is to keep $acc boxed in case of nthrow.
-              (let* ((so-far (dll-header-last seg))
-                     (handled-crf nil))
-                (declare (ignorable so-far))
-                (when (null vreg)
-                  (x862-form seg nil nil body)
-                  (setq body (make-acode (%nx1-operator nil))))
-                (x862-form  seg (if (or vreg (not (%izerop numundo))) *x862-arg-z*) nil body)
-                (when (and (backend-crf-p vreg)
-                           (eql 0 numundo))
-                  (let* ((last-vinsn (last-vinsn seg so-far))
-                         (unconditional (and last-vinsn (eq last-vinsn (last-vinsn-unless-label seg))))
-                         (template (and last-vinsn (vinsn-template last-vinsn)))
-                         (vinsn-name (and last-vinsn (vinsn-template-name template)))
-                         (constant-valued (member vinsn-name
-                                                  '(load-nil load-t lri lriu ref-constant))))
-                    (when constant-valued
-                      (let* ((targetlabel (if (eq vinsn-name 'load-nil) (x862-cd-false xfer) (x862-cd-true xfer))))
-                        (and (> targetlabel 0)
-                             (> $backend-return targetlabel)
-                             (let* ((diff (- *x862-vstack* (nth-value 2 (x862-decode-stack old-stack))))
-                                    (adjust (remove-dll-node (! vstack-discard (ash diff (- *x862-target-fixnum-shift*)))))
-                                    (jump (remove-dll-node (! jump (aref *backend-labels* targetlabel)))))
-                               (insert-dll-node-after adjust last-vinsn)
-                               (insert-dll-node-after jump adjust)
-                               (elide-vinsn last-vinsn)
-                               (setq handled-crf unconditional)))))))
-                (unless handled-crf
-                  (x862-unwind-set seg xfer old-stack)
-                  (when vreg (<- *x862-arg-z*))
-                  (^))))))))))
+            ;; There are some cases where storing thru *x862-arg-z*
+            ;; can be avoided (stores to vlocs, specials, etc.) and
+            ;; some other case where it can't ($test, $vpush.)  The
+            ;; case of a null vd can certainly avoid it; the check
+            ;; of numundo is to keep $acc boxed in case of nthrow.
+            (cond
+              ((null vreg)
+               (x862-form seg nil nil body)
+               (unless (%izerop numundo)
+                 (x862-form seg *x862-arg-z* nil (make-acode (%nx1-operator nil))))
+               (x862-unwind-set seg xfer old-stack)
+               (^))
+
+              ((and (backend-crf-p vreg)
+                    (eql 0 numundo))
+               (let* ((so-far (dll-header-last seg))
+                      (handled-crf nil))
+                 (x862-form seg *x862-arg-z* nil body)
+                 (let* ((last-vinsn (last-vinsn seg so-far))
+                        (unconditional (and last-vinsn (eq last-vinsn (last-vinsn-unless-label seg))))
+                        (template (and last-vinsn (vinsn-template last-vinsn)))
+                        (vinsn-name (and last-vinsn (vinsn-template-name template)))
+                        (constant-valued (member vinsn-name
+                                                 '(load-nil load-t lri lriu ref-constant))))
+                   (when constant-valued
+                     (let* ((targetlabel (if (eq vinsn-name 'load-nil) (x862-cd-false xfer) (x862-cd-true xfer))))
+                       (and (> targetlabel 0)
+                            (> $backend-return targetlabel)
+                            (let* ((diff (- *x862-vstack* (nth-value 2 (x862-decode-stack old-stack))))
+                                   (adjust (remove-dll-node (! vstack-discard (ash diff (- *x862-target-fixnum-shift*)))))
+                                   (jump (remove-dll-node (! jump (aref *backend-labels* targetlabel)))))
+                              (insert-dll-node-after adjust last-vinsn)
+                              (insert-dll-node-after jump adjust)
+                              (elide-vinsn last-vinsn)
+                              (setq handled-crf unconditional)))))
+                   (unless handled-crf
+                     (x862-unwind-set seg xfer old-stack)
+                     (<- *x862-arg-z*)
+                     (^)))))
+
+              ((%izerop numundo)
+               (x862-form seg vreg nil body)
+               (x862-unwind-set seg xfer old-stack)
+               (^))
+
+              (t
+               (x862-form seg *x862-arg-z* nil body)
+               (x862-unwind-set seg xfer old-stack)
+               (<- *x862-arg-z*)
+               (^)))))))))
 
 
 (defun x862-unwind-set (seg xfer encoding)
