@@ -1371,7 +1371,13 @@
               (%nx1-operator if)
               (make-acode 
                (%nx1-operator setq-lexical)
-               indexvar
+               (progn
+                 ;; We produce a SETQ-LEXICAL here without going through the
+                 ;; frontend, so we have to set the necessary bits manually.
+                 (nx-set-var-bits indexvar (%ilogior2 (nx-var-bits indexvar)
+                                                      (%ilsl $vbitsetq 1)))
+                 (nx-adjust-setq-count indexvar 1)
+                 indexvar)
                (make-acode 
                 (%nx1-operator catch)
                 (nx1-form :value (var-name catchvar)) 
