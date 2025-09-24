@@ -758,7 +758,22 @@
   (dolist (arg (car arglist))
     (rewrite-acode-form arg))
   (dolist (arg (cadr arglist))
-    (rewrite-acode-form arg)))
+    (rewrite-acode-form arg))
+
+  ;; Rewriting LOAD-BYTE like this helps a lot, but it's ultimately just a hack
+  ;; for conditional inlining that belongs somewhere else in more general form.
+  (acode-call-match (load-byte (size position (integer *nx-target-natural-type*))) w
+    (let ((csize (acode-fixnum-form-p size))
+          (cpos (acode-fixnum-form-p position)))
+      (when (and csize (>= csize 0)
+                 cpos (>= cpos 0)
+                 (<= (+ csize cpos)
+                     (arch::target-nbits-in-word (backend-target-arch *target-backend*))))
+        (update-acode w (%nx1-operator logand2)
+                      (list (nx1-form :value (byte-mask csize))
+                            (make-acode (%nx1-operator ash)
+                                        integer
+                                        (make-acode (%nx1-operator fixnum) (- cpos)))))))))
 
 
 (def-acode-rewrite acode-rewrite-arglist-form (list* %err-disp) asserted-type (&whole w arglist)
