@@ -893,10 +893,17 @@
 
 ;;; The backends may try to eliminate the &rest arg if the body is
 ;;; obviously an APPLY that uses it.  We could do that here.
-(def-acode-rewrite acode-rewrite-lambda-bind lambda-bind asserted-type (vals req rest keys-p auxen body p2decls)
+(def-acode-rewrite acode-rewrite-lambda-bind lambda-bind asserted-type (&whole w vals req rest keys-p auxen body p2decls)
   (declare (ignore keys-p rest))
-  (dolist (var req)
-    (acode-maybe-punt-var var (pop vals)))
+  (collect ((new-req-vars)
+            (new-req-vals))
+    (dolist (var req)
+      (let ((val (pop vals)))
+        (unless (acode-maybe-punt-var var val)
+          (new-req-vars var)
+          (new-req-vals val))))
+    (setf (first (acode-operands w)) (append (new-req-vals) vals)
+          (second (acode-operands w)) (new-req-vars)))
   (dolist (val vals)
     (rewrite-acode-form val))
   (do* ((auxvars (car auxen) (cdr auxvars))
