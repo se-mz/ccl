@@ -579,6 +579,90 @@
   (rewrite-acode-form vector)
   (rewrite-acode-form i))
 
+;;; This is basically a translation of NX1-1D-VREF. Is there any reason to not
+;;; just let the acode rewriter handle all of this?
+(def-acode-rewrite acode-rewrite-uvref uvref asserted-type (&whole w arr dim0)
+  (rewrite-acode-form arr)
+  (rewrite-acode-form dim0)
+  (let* ((trust-decls *acode-rewrite-trust-declarations*)
+         (simple-vector-p (acode-form-typep arr 'simple-vector trust-decls))
+	 (simple-string-p (unless simple-vector-p
+                            (acode-form-typep arr 'simple-string trust-decls)))
+         (simple-1d-array-p (unless (or simple-vector-p simple-string-p)
+                              (acode-form-typep arr '(simple-array * (*)) trust-decls)))
+         (array-type (specifier-type (acode-form-type arr trust-decls)))
+         (type-keyword (funcall
+                        (arch::target-array-type-name-from-ctype-function
+                         (backend-target-arch *target-backend*))
+                        array-type)))
+    (if (and simple-1d-array-p type-keyword)
+        (update-acode w (%nx1-operator %typed-uvref)
+                      (list (nx1-immediate :value type-keyword) arr dim0)
+                      :type (ctype-specifier (array-ctype-specialized-element-type array-type)))
+        ;; NX1-1D-VREF punts to UVREF in some cases; we can't do this because
+        ;; it'd cause an infinite loop.
+        (let* ((op (cond (simple-string-p (%nx1-operator %sbchar))
+                         (simple-vector-p (if *acode-rewrite-reckless*
+                                              (%nx1-operator %svref)
+                                              (%nx1-operator svref)))
+                         (t nil))))
+          (when op
+            (update-acode w op (list arr dim0)))))))
+
+;;; Similarly, this is basically a replay of NX1-%AREF2.
+(def-acode-rewrite acode-rewrite-general-aref2 general-aref2 asserted-type (&whole w arr i j)
+  (rewrite-acode-form arr)
+  (rewrite-acode-form i)
+  (rewrite-acode-form j)
+  (let* ((ctype (specifier-type (acode-form-type arr *acode-rewrite-trust-declarations*)))
+         (atype (if (csubtypep ctype (specifier-type '(array * (* *)))) ctype))
+         (simple-atype (if (and atype
+                                (csubtypep atype (specifier-type '(simple-array * (* *)))))
+                           atype))
+         (type-keyword (if atype
+                           (funcall
+                            (arch::target-array-type-name-from-ctype-function
+                             (backend-target-arch *target-backend*))
+                            atype))))
+    (when (and type-keyword simple-atype)
+      (let* ((dims (array-ctype-dimensions atype))
+             (dim0 (car dims))
+             (dim1 (cadr dims)))
+        (update-acode w (%nx1-operator simple-typed-aref2)
+                      (list (nx1-form :value type-keyword)
+                            arr i j
+                            (nx1-form :value (if (typep dim0 'fixnum) dim0))
+                            (nx1-form :value (if (typep dim1 'fixnum) dim1)))
+                      :type (ctype-specifier (array-ctype-specialized-element-type atype)))))))
+
+;;; And this one of NX1-%AREF3.
+(def-acode-rewrite acode-rewrite-general-aref3 general-aref3 asserted-type (&whole w arr i j k)
+  (rewrite-acode-form arr)
+  (rewrite-acode-form i)
+  (rewrite-acode-form j)
+  (rewrite-acode-form k)
+  (let* ((ctype (specifier-type (acode-form-type arr *acode-rewrite-trust-declarations*)))
+         (atype (if (csubtypep ctype (specifier-type '(array * (* * *)))) ctype))
+         (simple-atype (if (and atype
+                                (csubtypep atype (specifier-type '(simple-array * (* * *)))))
+                           atype))
+         (type-keyword (if atype
+                           (funcall
+                            (arch::target-array-type-name-from-ctype-function
+                             (backend-target-arch *target-backend*))
+                            atype))))
+    (when (and type-keyword simple-atype)
+      (let* ((dims (array-ctype-dimensions atype))
+             (dim0 (car dims))
+             (dim1 (cadr dims))
+             (dim2 (caddr dims)))
+        (update-acode w (%nx1-operator simple-typed-aref3)
+                      (list (nx1-form :value type-keyword)
+                            arr i j k
+                            (nx1-form :value (if (typep dim0 'fixnum) dim0))
+                            (nx1-form :value (if (typep dim1 'fixnum) dim1))
+                            (nx1-form :value (if (typep dim2 'fixnum) dim2)))
+                      :type (ctype-specifier (array-ctype-specialized-element-type atype)))))))
 
 (def-acode-rewrite acode-rewrite-%sbchar %sbchar  asserted-type (&whole w string idx)
   (rewrite-acode-form string)
