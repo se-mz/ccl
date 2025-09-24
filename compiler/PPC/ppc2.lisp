@@ -8849,6 +8849,25 @@
                 (<- other-reg))))
           (^))))))
 
+(defppc2 ppc2-natural-lognot %natural-lognot (seg vreg xfer x)
+  (if (null vreg)
+      (ppc2-form seg nil xfer x)
+      (let* ((const (nx-natural-constant-p x)))
+        (if const
+            (ppc2-natural-constant seg vreg xfer (ldb (byte (target-arch-case
+                                                             (:ppc32 32)
+                                                             (:ppc64 64))
+                                                            0)
+                                                      (lognot const)))
+            (with-imm-target () (xreg :natural)
+              (ppc2-one-targeted-reg-form seg x xreg)
+              (with-imm-target (xreg) (yreg :natural)
+                (target-arch-case
+                 (:ppc32 (! u32-lognot yreg xreg))
+                 (:ppc64 (! u64-lognot yreg xreg)))
+                (<- yreg)
+                (^)))))))
+
 (defppc2 ppc2-natural-shift-right natural-shift-right (seg vreg xfer num amt)
   (with-imm-target () (dest :natural)
     (ppc2-one-targeted-reg-form seg num dest)

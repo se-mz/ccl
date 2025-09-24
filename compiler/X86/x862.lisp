@@ -11554,6 +11554,22 @@
                   (<- other-reg)))))
           (^))))))
 
+(defx862 x862-natural-lognot %natural-lognot (seg vreg xfer x)
+  (if (null vreg)
+      (x862-form seg nil xfer x)
+      (let* ((const (nx-natural-constant-p x)))
+        (if const
+            (x862-natural-constant seg vreg xfer (ldb (byte (target-arch-case
+                                                             (:x8664 64)
+                                                             (:x8632 32))
+                                                            0)
+                                                      (lognot const)))
+            (with-imm-target () (xreg :natural)
+              (x862-one-targeted-reg-form seg x xreg)
+              (! %natural-lognot xreg)
+              (<- xreg)
+              (^))))))
+
 (defx862 x862-natural-shift-right natural-shift-right (seg vreg xfer num amt)
   (with-imm-target () (dest :natural)
     (x862-one-targeted-reg-form seg num dest)

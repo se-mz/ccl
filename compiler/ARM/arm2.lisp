@@ -9522,6 +9522,19 @@ v idx-reg constidx val-reg (arm2-unboxed-reg-for-aset seg type-keyword val-reg s
                   (<- other-reg)))))
           (^))))))
 
+(defarm2 arm2-%natural-lognot %natural-lognot (seg vreg xfer x)
+  (if (null vreg)
+      (arm2-form seg nil xfer x)
+      (let* ((const (nx-natural-constant-p x)))
+        (if const
+            (arm2-natural-constant seg vreg xfer (ldb (byte 32 0) (lognot const)))
+            (with-imm-target () (xreg :natural)
+              (arm2-one-targeted-reg-form seg x xreg)
+              (with-imm-target (xreg) (yreg :natural)
+                (! u32-lognot yreg xreg)
+                (<- yreg)
+                (^)))))))
+
 (defarm2 arm2-natural-shift-right natural-shift-right (seg vreg xfer num amt)
   (with-imm-target () (dest :natural)
     (arm2-one-targeted-reg-form seg num dest)

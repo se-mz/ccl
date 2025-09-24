@@ -149,6 +149,39 @@
      (acode-rewrite-decls ,declsform)
      ,@body))
 
+;;; Helper macro to recognize specific function calls. Only handles lambda lists
+;;; with required arguments for now. Lambda list parameters can have (evaluated)
+;;; types that'll be checked before descending into the body.
+(defmacro acode-call-match ((name (&rest typed-lambda-list)) acode-form &body body)
+  (let* ((acode (gensym "ACODE"))
+         (callable (gensym "CALLABLE"))
+         (arglist (gensym "ARGLIST"))
+         (spread-p (gensym "SPREAD-P"))
+         (args-and-types (mapcar (lambda (x)
+                                   (if (or (atom x)
+                                           (null (cdr x)))
+                                       (list x t)
+                                       x))
+                                 typed-lambda-list)))
+    `(let ((,acode ,acode-form))
+       ;; Deliberately ignore BUILTIN-CALL and LEXICAL-CALL.
+       (when (eq (acode-operator ,acode) (%nx1-operator call))
+         (destructuring-bind (,callable ,arglist &optional ,spread-p)
+             (acode-operands ,acode)
+           (when (and (eq (acode-operator ,callable) (%nx1-operator immediate))
+                      (eq (car (acode-operands ,callable)) ',name)
+                      (not ,spread-p)
+                      (= ,(length args-and-types)
+                         (+ (length (car ,arglist)) (length (cadr ,arglist)))))
+             (let ((,arglist (append (car ,arglist) (reverse (cadr ,arglist)))))
+               (let (,@(loop :for i :from 0
+                             :for spec :in args-and-types
+                             :collect `(,(first spec) (nth ,i ,arglist))))
+                 (when (and ,@(loop :for (arg type) :in args-and-types
+                                    :unless (eq type t)
+                                      :collect `(acode-form-typep ,arg ,type *acode-rewrite-trust-declarations*)))
+                   ,@body)))))))))
+
 (defun acode-maybe-punt-var (var initform)
   (let* ((bits (nx-var-bits var)))
     (declare (fixnum bits))
@@ -637,7 +670,10 @@
                           const-shift
                           (< 0 const-shift (arch::target-nbits-in-word
                                             (backend-target-arch *target-backend*))))
-                 (rewrite (%nx1-operator natural-shift-left) x y))))))))))
+                 (rewrite (%nx1-operator natural-shift-left) x y))))
+            (#.(%nx1-operator call)
+             (acode-call-match (lognot ((arg natural-type))) unwrapped
+               (rewrite (%nx1-operator %natural-lognot) arg)))))))))
 
 (def-acode-rewrite acode-rewrite-logand (logand2 %ilogand2 %natural-logand) asserted-type  (&whole w x y) 
   (or (acode-constant-fold-numeric-binop  w x y 'logand)

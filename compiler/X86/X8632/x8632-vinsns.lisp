@@ -3568,6 +3568,10 @@
                                        (constant :u32const)))
   (andl (:$l (:apply unsigned-to-signed constant 32)) (:%l result)))
 
+(define-x8632-vinsn %natural-lognot (((result :u32))
+                                     ((result :u32)))
+  (notl (:%l result)))
+
 (define-x8632-vinsn %natural-logxor (((result :u32))
                                     ((result :u32)
                                      (other :u32)))

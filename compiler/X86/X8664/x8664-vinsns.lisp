@@ -4710,6 +4710,10 @@
                                        (constant :s32const)))
   (andq (:$l constant) (:%q result)))
 
+(define-x8664-vinsn %natural-lognot (((result :u64))
+                                     ((result :u64)))
+  (notq (:%q result)))
+
 (define-x8664-vinsn %natural-logxor (((result :u64))
                                     ((result :u64)
                                      (other :u64)))
