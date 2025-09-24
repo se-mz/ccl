@@ -3819,7 +3819,7 @@
 
 
 (defun x86-side-effect-free-form-p (form)
-  (when (consp (setq form (acode-unwrapped-form-value form)))
+  (when (acode-p (setq form (acode-unwrapped-form-value form)))
     (or (x86-constant-form-p form)
         ;(eq (acode-operator form) (%nx1-operator bound-special-ref))
         (and (eq (acode-operator form) (%nx1-operator %svref))
@@ -3827,9 +3827,9 @@
                (let* ((idx (acode-fixnum-form-p i)))
                  (and idx
                       (nx2-constant-index-ok-for-type-keyword idx :simple-vector)
-                      (consp (setq v (acode-unwrapped-form-value v)))
+                      (acode-p (setq v (acode-unwrapped-form-value v)))
                       (eq (acode-operator v) (%nx1-operator lexical-reference))
-                      (let* ((var (cadr v)))
+                      (let* ((var (car (acode-operands v))))
                         (unless (%ilogbitp $vbitsetq (nx-var-bits var))
                           (var-nvr var)))))))
         (if (eq (acode-operator form) (%nx1-operator lexical-reference))
@@ -4931,7 +4931,7 @@
 
 
 (defun x862-immediate-form-p (form)
-  (if (and (consp form)
+  (if (and (acode-p form)
            (or (eq (%car form) (%nx1-operator immediate))
                (eq (%car form) (%nx1-operator simple-function))))
     t))
