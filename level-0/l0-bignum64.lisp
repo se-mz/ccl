@@ -290,7 +290,8 @@
 ;;; digit of A, propagating the carry.
 (defun finish-bignum-add (result carry a sign-b start end)
   (declare (type bignum-index start end)
-           (bignum-element-type sign-b carry)
+           (type (integer -1 0) sign-b)
+           (bignum-element-type carry)
            (optimize (speed 3) (safety 0)))
   (do* ((i start (1+ i))
         (sign-b (logand all-ones-digit sign-b)))

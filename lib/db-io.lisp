@@ -46,10 +46,12 @@
   (declare (type (unsigned-byte 29) len))
   (let* ((h 5381))
     (declare (type (unsigned-byte 29) h))
-    (dotimes (i len (logand h cdb-hash-mask))
+    (dotimes (i len h)
       (declare (type (unsigned-byte 29) i))
-      (setq h (+ h (the (unsigned-byte 29) (logand cdb-hash-mask (the (signed-byte 30) (ash h 5))))))
-
+      (setq h
+            ;; Intentionally wrong type declarations to get fixnum arithmetic.
+            #+32-bit-target (logand cdb-hash-mask (the fixnum (+ h (the fixnum (ash h 5)))))
+            #-32-bit-target (logand cdb-hash-mask (+ h (the (unsigned-byte 34) (ash h 5)))))
       (setq h (logxor (the (unsigned-byte 8) (%get-unsigned-byte buf i)) h)))))
 
 (defconstant cdbm-hplist 1000)

@@ -634,6 +634,23 @@
       (acode-strength-reduce-binop w x y *nx-target-natural-type* (%nx1-operator logior2) (%nx1-operator %natural-logior)))
 )
 
+(defun acode-omit-redundant-masking (w x y)
+  (let* ((xconst (acode-xxx-form-p x 'integer))
+         (yconst (acode-xxx-form-p y 'integer))
+         (const (or xconst yconst))
+         (other (if xconst y x))
+         (other-ctype (when const
+                        (bounded-integer-type-p
+                         (acode-form-type other *acode-rewrite-trust-declarations*)))))
+    (when (or (eql const -1)
+              ;; We only look at integer length for simplicity. Once that's
+              ;; decided, there isn't much we can do for negative numbers.
+              (and other-ctype
+                   (>= (numeric-ctype-low other-ctype) 0)
+                   (let ((other-mask (1- (ash 1 (integer-length (numeric-ctype-high other-ctype))))))
+                     (= other-mask (logand other-mask const)))))
+      (update-acode w (%nx1-operator require-integer) (list other)))))
+
 (defun acode-rewrite-to-modular-natural-op (w x y)
   (let* ((natural-type *nx-target-natural-type*)
          (xnat (when (acode-form-typep x natural-type *acode-rewrite-trust-declarations*) x))
@@ -677,19 +694,10 @@
 
 (def-acode-rewrite acode-rewrite-logand (logand2 %ilogand2 %natural-logand) asserted-type  (&whole w x y) 
   (or (acode-constant-fold-numeric-binop  w x y 'logand)
+      (acode-omit-redundant-masking w x y)
       (acode-rewrite-to-modular-natural-op w x y)
       (acode-strength-reduce-binop w x y *nx-target-fixnum-type* (%nx1-operator logand2) (%nx1-operator %ilogand2))
-      (acode-strength-reduce-binop w x y *nx-target-natural-type* (%nx1-operator logand2) (%nx1-operator %natural-logand))
-      (cond ((eql -1 (acode-fixnum-form-p x))
-             (setf (acode-operator w) (%nx1-operator require-integer)
-                   (acode-operands w) (list y)
-                   (acode.asserted-type w) nil)
-             t)
-            ((eql -1 (acode-fixnum-form-p y))
-             (setf (acode-operator w) (%nx1-operator require-integer)
-                   (acode-operands w) (list x)
-                   (acode.asserted-type w) nil)
-             t))))
+      (acode-strength-reduce-binop w x y *nx-target-natural-type* (%nx1-operator logand2) (%nx1-operator %natural-logand))))
 
 (def-acode-rewrite acode-rewrite-logxor (logxor2 %ilogxor2 %natural-logxor) asserted-type  (&whole w x y) 
   (or (acode-constant-fold-numeric-binop  w x y 'logxor)
