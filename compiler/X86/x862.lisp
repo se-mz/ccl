@@ -311,7 +311,9 @@
       (ecase type
         (#. memspec-nfp-type-natural
             (unless (and (eql vreg-class hard-reg-class-gpr)
-                         (eql vreg-mode hard-reg-class-gpr-mode-u32))
+                         (eql vreg-mode (target-arch-case
+                                         (:x8632 hard-reg-class-gpr-mode-u32)
+                                         (:x8664 hard-reg-class-gpr-mode-u64))))
               (setq reg (available-imm-temp
                          *available-backend-imm-temps*
                          :natural)))            
