@@ -601,8 +601,47 @@
       (acode-strength-reduce-binop w x y *nx-target-natural-type* (%nx1-operator logior2) (%nx1-operator %natural-logior)))
 )
 
+(defun acode-rewrite-to-modular-natural-op (w x y)
+  (let* ((natural-type *nx-target-natural-type*)
+         (xnat (when (acode-form-typep x natural-type *acode-rewrite-trust-declarations*) x))
+         (ynat (when (acode-form-typep y natural-type *acode-rewrite-trust-declarations*) y))
+         (other (cond ((and xnat ynat) nil) (xnat y) (ynat x) (t nil))))
+    (when other
+      (let* ((unwrapped (acode-unwrapped-form other))
+             (x (first (acode-operands unwrapped)))
+             (y (second (acode-operands unwrapped))))
+        (flet ((natural-forms-p (&rest operands)
+                 (dolist (operand operands t)
+                   (unless (acode-form-typep operand natural-type *acode-rewrite-trust-declarations*)
+                     (return nil))))
+               (rewrite (op &rest args)
+                 ;; Intentionally strips off type declarations from OTHER since
+                 ;; the operator change might invalidate them. Punted lexrefs
+                 ;; also disappear into the void here, but this doesn't matter
+                 ;; too much; I guess it might hurt the source info?
+                 (update-acode other op args)
+                 ;; This is a LOGAND of naturals now; optimize more.
+                 (setf (acode-walked w) nil)
+                 (rewrite-acode-form w)
+                 t))
+          (case (acode-operator unwrapped)
+            (#.(%nx1-operator add2)
+             (when (natural-forms-p x y)
+               (rewrite (%nx1-operator %natural+) x y)))
+            (#.(%nx1-operator sub2)
+             (when (natural-forms-p x y)
+               (rewrite (%nx1-operator %natural-) x y)))
+            (#.(%nx1-operator ash)
+             (let ((const-shift (acode-fixnum-form-p y)))
+               (when (and (natural-forms-p x)
+                          const-shift
+                          (< 0 const-shift (arch::target-nbits-in-word
+                                            (backend-target-arch *target-backend*))))
+                 (rewrite (%nx1-operator natural-shift-left) x y))))))))))
+
 (def-acode-rewrite acode-rewrite-logand (logand2 %ilogand2 %natural-logand) asserted-type  (&whole w x y) 
   (or (acode-constant-fold-numeric-binop  w x y 'logand)
+      (acode-rewrite-to-modular-natural-op w x y)
       (acode-strength-reduce-binop w x y *nx-target-fixnum-type* (%nx1-operator logand2) (%nx1-operator %ilogand2))
       (acode-strength-reduce-binop w x y *nx-target-natural-type* (%nx1-operator logand2) (%nx1-operator %natural-logand))
       (cond ((eql -1 (acode-fixnum-form-p x))
