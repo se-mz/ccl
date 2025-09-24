@@ -1012,3 +1012,34 @@
                   (acode-strength-reduce-binop w num1 num2 'single-float op (%nx1-operator short-float-compare))
                   ;; Could try contagion here
                   ))))))))
+
+;;; Some optimizations (e.g. removing neutral elements of a binop) produce
+;;; REQUIRE-*, which weakens type inference and blocks further optimizations.
+(def-acode-rewrite acode-rewrite-require
+    (require-simple-vector
+     require-simple-string
+     require-integer
+     require-list
+     require-fixnum
+     require-real
+     require-character
+     require-number
+     require-symbol
+     require-s8
+     require-u8
+     require-s16
+     require-u16
+     require-s32
+     require-u32
+     require-s64
+     require-u64)
+    asserted-type (&whole w x)
+  (rewrite-acode-form x)
+  ;; Beats writing out the types... *ACODE-OPERATOR-TYPES* is initialized to Ts
+  ;; and only populated once the backend is loaded, so guard against T. :INFER
+  ;; should never appear, so check that too while we're at it.
+  (let ((type (svref *acode-operator-types* (logand (acode-operator w) operator-id-mask))))
+    (when (and (not (member type '(t :infer)))
+               (acode-form-typep x type *acode-rewrite-trust-declarations*))
+      ;; These forms are single-valued, so use PROG1 instead of PROGN.
+      (update-acode w (%nx1-operator prog1) (list (list x))))))
