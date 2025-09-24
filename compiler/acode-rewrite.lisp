@@ -81,6 +81,16 @@
               (rewrite-acode-form operand))
             (format t "~&can't rewrite ~s : ~s" (acode-operator-name op) form)))))))
 
+(defun update-acode (acode new-operator new-operands &key (rewrite t) (type nil))
+  (setf (acode-operator acode) new-operator
+        (acode-operands acode) new-operands
+        (acode.asserted-type acode) type)
+  (when rewrite
+    (setf (acode-walked acode) nil)
+    (rewrite-acode-form acode))
+  ;; Allows using UPDATE-ACODE in OR chains.
+  t)
+
 (defun acode-wrap-in-unary-op (form op)
   (let* ((new (make-acode* (acode-operator form) (acode-operands form))))
     (setf (acode-operator form) op
@@ -315,18 +325,13 @@
           (cond ((and c1 (> c1 0) (< c1 (ash 1 24)) (eql (logcount c1) 1)
                       (acode-form-typep form2 'integer trust-decls))
                  (setq shift-count (1- (integer-length c1)))
-                 (setf (acode-operator w) (%nx1-operator ash)
-                       (car (acode-operands w)) form2
-                       (cadr (acode-operands w)) (make-acode (%nx1-operator fixnum) shift-count)
-                       (acode.asserted-type w) nil)
-                 (rewrite-acode-form w))
+                 (update-acode w (%nx1-operator ash)
+                               (list form2 (make-acode (%nx1-operator fixnum) shift-count))))
                 ((and c2 (> c2 0) (< c2 (ash 1 24)) (eql (logcount c2) 1)
                       (acode-form-typep form1 'integer trust-decls))
                  (setq shift-count (1- (integer-length c2)))
-                 (setf (acode-operator w) (%nx1-operator ash)
-                       (cadr (acode-operands w)) (make-acode (%nx1-operator fixnum) shift-count)
-                       (acode.asserted-type w) nil)
-                 (rewrite-acode-form w))
+                 (update-acode w (%nx1-operator ash)
+                               (list form1 (make-acode (%nx1-operator fixnum) shift-count))))
                 (t
                  (let* ((newtype nil)
                         (newop (cond ((and (subtypep t1 'double-float)
@@ -377,13 +382,9 @@
                        (eq (acode-operator unwrapped) (%nx1-operator %i*)))
                    (setq f1 (acode-fixnum-form-p (car (acode-operands unwrapped))))
                    (typep (setq f1/f2 (/ f1 f2)) 'fixnum))
-                (progn
-                  (setf (acode-operator w) (%nx1-operator mul2)
-                        (acode-operands w) (list (make-acode (%nx1-operator fixnum) f1/f2)
-                                                 (cadr (acode-operands unwrapped)))
-                        (acode.asserted-type w) nil)
-                  (rewrite-acode-form w)
-                  t))))))
+              (update-acode w (%nx1-operator mul2)
+                            (list (make-acode (%nx1-operator fixnum) f1/f2)
+                                  (cadr (acode-operands unwrapped)))))))))
 
 (def-acode-rewrite acode-rewrite-minus1 minus1 asserted-type (&whole w form)
   (rewrite-acode-form form)
