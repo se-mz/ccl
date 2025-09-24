@@ -227,34 +227,26 @@
          (unless (acode-form-typep form2 'double-float trust-decls)
            (let* ((c2 (acode-real-constant-p form2)))
              (if c2
-               (setf (acode-operator form2) (%nx1-operator immediate)
-                     (acode.asserted-type form2) nil
-                     (acode-operands form2) (cons (float c2 0.0d0) nil))
+               (acode-rewrite-as-constant-ref form2 (float c2 0.0d0))
                (if (acode-form-typep form2 'fixnum trust-decls)
                  (acode-wrap-in-unary-op form2 (%nx1-operator %fixnum-to-double)))))))
         ((acode-form-typep form2 'double-float trust-decls)
          (let* ((c1 (acode-real-constant-p form1)))
            (if c1
-               (setf (acode-operator form1) (%nx1-operator immediate)
-                     (acode.asserted-type form1) nil
-                     (acode-operands form1) (cons (float c1 0.0d0) nil))
+             (acode-rewrite-as-constant-ref form1 (float c1 0.0d0))
              (if (acode-form-typep form1 'fixnum trust-decls)
                (acode-wrap-in-unary-op form1 (%nx1-operator %fixnum-to-double))))))
         ((acode-form-typep form1 'single-float trust-decls)
          (unless (acode-form-typep form2 'single-float trust-decls)
            (let* ((c2 (acode-real-constant-p form2)))
              (if c2
-               (setf (acode-operator form2) (%nx1-operator immediate)
-                     (acode.asserted-type form2) nil
-                     (acode-operands form2) (cons (float c2 0.0f0) nil))
+               (acode-rewrite-as-constant-ref form2 (float c2 0.0f0))
                (if (acode-form-typep form2 'fixnum trust-decls)
                  (acode-wrap-in-unary-op form2 (%nx1-operator %fixnum-to-single)))))))
         ((acode-form-typep form2 'single-float trust-decls)
          (let* ((c1 (acode-real-constant-p form1)))
              (if c1
-               (setf (acode-operator form1) (%nx1-operator immediate)
-                     (acode.asserted-type form1) nil
-                     (acode-operands form1) (cons (float c1 0.0f0) nil))
+               (acode-rewrite-as-constant-ref form1 (float c1 0.0f0))
                (if (acode-form-typep form1 'fixnum trust-decls)
                  (acode-wrap-in-unary-op form1 (%nx1-operator %fixnum-to-single))))))))
   
@@ -561,19 +553,7 @@
         (when (and (typep cidx 'fixnum)
                    (>= (the fixnum cidx) 0)
                    (< (the fixnum cidx) (the fixnum (uvsize cv))))
-          (let* ((val (%svref cv cidx)))
-            (case val
-              (nil (setf (acode-operator w) (%nx1-operator nil)
-                         (acode-operands w) nil))
-              ((t) (setf (acode-operator w) (%nx1-operator t)
-                         (acode-operands w) nil))
-              (t
-               (setf (acode-operator w) (if (nx1-target-fixnump val)
-                                          (%nx1-operator fixnum)
-                                          (%nx1-operator immediate))
-                     (acode-operands w) (cons val nil))))
-            (setf (acode.asserted-type w) nil)
-            t))))))
+          (acode-rewrite-as-constant-ref w (%svref cv cidx)))))))
 
 (def-acode-rewrite acode-rewrite-%svref %svref asserted-type (vector i)
   (rewrite-acode-form vector)
@@ -673,12 +653,7 @@
         (when (and (typep cidx 'fixnum)
                    (>= (the fixnum cidx) 0)
                    (< (the fixnum cidx) (the fixnum (length cv))))
-          (let* ((val (%schar cv cidx)))
-            (setf (acode-operator w) (%nx1-operator immediate)
-                  (car (acode-operands w)) val
-                  (cdr (acode-operands w)) nil
-                  (acode.asserted-type w) nil)
-            t))))))
+          (acode-rewrite-as-constant-ref w (%schar cv cidx)))))))
 
 
 (def-acode-rewrite acode-rewrite-consp consp asserted-type (&whole w cc thing)
@@ -688,9 +663,7 @@
       (let* ((consp (consp cthing))
              (ccode (car (acode-operands cc)))
              (val (if (eq ccode :eq) (not (not consp)) (not consp))))
-        (setf (acode-operator w) (if val (%nx1-operator t) (%nx1-operator nil))
-              (acode-operands w) nil
-              (acode.asserted-type w) nil)))))
+        (acode-rewrite-as-constant-ref w val)))))
 
 
 (def-acode-rewrite acode-rewrite-load-time-value (load-time-value) asserted-type (val)
@@ -720,10 +693,7 @@
   (rewrite-acode-form c)
   (let* ((char (acode-constant-p c)))
     (when (typep char 'character)
-      (let* ((code (char-code char)))
-        (setf (acode-operator w) (%nx1-operator fixnum)
-              (acode-operands w) (list code)
-              (acode.asserted-type w) nil)))))
+      (acode-rewrite-as-constant-ref w (char-code char)))))
 
 (def-acode-rewrite acode-rewrite-logior (logior2 %ilogior2 %natural-logior) asserted-type  (&whole w x y) 
   (let ((inferred-type (acode-infer-type-via #'bounded-integer-type-for-logior x y)))
@@ -816,11 +786,7 @@
   (let* ((val (acode-fixnum-form-p x))
          (negated (if val (- val))))
     (if negated
-      (setf (acode-operator w) (if (typep negated *nx-target-fixnum-type*)
-                                 (%nx1-operator fixnum)
-                                 (%nx1-operator immediate))
-            (acode-operands w) (list negated)
-            (acode.asserted-type w) nil))))
+        (acode-rewrite-as-constant-ref w negated))))
 
 (def-acode-rewrite rewrite-type-asserted-form type-asserted-form asserted-type (&whole w type form &optional check)
   (declare (ignore check))
@@ -994,12 +960,9 @@
   (rewrite-acode-form form)
   (multiple-value-bind (val constantp) (acode-constant-p form)
     (when constantp
-      (setf (acode-operator w)
-            (if (if (eq (car (acode-operands cc)) :eq) (eql val 0) (not (eql val 0)))
-                (%nx1-operator t)
-                (%nx1-operator nil))
-            (acode-operands w) nil
-            (acode.asserted-type w) nil))))
+      (acode-rewrite-as-constant-ref w (if (eq (car (acode-operands cc)) :eq)
+                                           (eql val 0)
+                                           (not (eql val 0)))))))
 
 (def-acode-rewrite acode-rewrite-eq eq asserted-type (&whole w cc x y)
   (rewrite-acode-form x)
@@ -1007,12 +970,9 @@
   (multiple-value-bind (xval xconst) (acode-constant-p x)
     (multiple-value-bind (yval yconst) (acode-constant-p y)
       (when (and xconst yconst)
-        (setf (acode-operator w)
-              (if (if (eq (car (acode-operands cc)) :eq) (eql xval yval) (not (eql xval yval)))
-                (%nx1-operator t)
-                (%nx1-operator nil))
-              (acode-operands w) nil
-              (acode.asserted-type w) nil)))))
+        (acode-rewrite-as-constant-ref w (if (eq (car (acode-operands cc)) :eq)
+                                             (eql xval yval)
+                                             (not (eql xval yval))))))))
 
 (def-acode-rewrite acode-rewrite-with-c-frame with-c-frame asserted-type (body)
   (rewrite-acode-form body asserted-type))
