@@ -627,6 +627,82 @@ function to the indicated name is true.")
                                ,min
                                ,max)))))))
 
+;;; It suffices to do type inference for logops on the integer length level. A
+;;; bit range is a pair of two values that specify how far the ctype reaches
+;;; into the (-inf;-1] and [0;inf) intervals (in bits). NIL means the ctype is
+;;; disjoint from the interval. It's impossible for both values to be NIL.
+
+(defun bounded-integer-type-bit-range (ctype)
+  (assert (ctype-p ctype))
+  (let ((high (numeric-ctype-high ctype))
+        (low (numeric-ctype-low ctype)))
+    (values (if (>= low 0) nil (integer-length low))
+            (if (<= high -1) nil (integer-length high)))))
+
+(defun bit-range-ctype (m p)
+  (specifier-type
+   (cond
+     ((null m) (if (zerop p) `(integer 0 0) `(unsigned-byte ,p)))
+     ((eql m p) `(signed-byte ,(1+ m)))
+     ((null p) `(integer ,(ash -1 m) -1))
+     (t `(integer ,(ash -1 m) ,(1- (ash 1 p)))))))
+
+(defun bit-range-of-logand (m1 p1 m2 p2)
+  (cond
+    ((and (null m1) (null m2)) (values nil (min p1 p2)))
+    ((null m1) (values nil p1))
+    ((null m2) (values nil p2))
+    ((and (null p1) (null p2)) (values (max m1 m2) nil))
+    (t (values (max m1 m2)
+               (if (and p1 p2)
+                   (max p1 p2)
+                   (or p1 p2))))))
+
+(defun bit-range-of-logior (m1 p1 m2 p2)
+  (multiple-value-bind (m p) (bit-range-of-logand p1 m1 p2 m2)
+    (values p m)))
+
+;;; Uses x^y = (x|y) & ~(x&y).
+(defun bit-range-of-logxor (m1 p1 m2 p2)
+  (multiple-value-bind (ior-m ior-p) (bit-range-of-logior m1 p1 m2 p2)
+    (multiple-value-bind (and-m and-p) (bit-range-of-logand m1 p1 m2 p2)
+      (bit-range-of-logand ior-m ior-p and-p and-m))))
+
+(defun bounded-integer-type-for-logand (type1 type2)
+  (let* ((t1 (bounded-integer-type-p type1))
+         (t2 (bounded-integer-type-p type2))
+         (bounded (or t1 t2)))
+    (cond
+      ((and t1 t2)
+       (multiple-value-call #'bit-range-ctype
+         (multiple-value-call #'bit-range-of-logand
+           (bounded-integer-type-bit-range t1)
+           (bounded-integer-type-bit-range t2))))
+      ;; LOGAND with an (UNSIGNED-BYTE n) is always an (UNSIGNED-BYTE n).
+      ;; There's a similar (less useful) rule for LOGIOR and negative numbers.
+      (bounded
+       (multiple-value-bind (m p) (bounded-integer-type-bit-range bounded)
+         (when (null m)
+           (bit-range-ctype m p)))))))
+
+(defun bounded-integer-type-for-logior (type1 type2)
+  (let ((t1 (bounded-integer-type-p type1))
+        (t2 (bounded-integer-type-p type2)))
+    (when (and t1 t2)
+      (multiple-value-call #'bit-range-ctype
+        (multiple-value-call #'bit-range-of-logior
+          (bounded-integer-type-bit-range t1)
+          (bounded-integer-type-bit-range t2))))))
+
+(defun bounded-integer-type-for-logxor (type1 type2)
+  (let ((t1 (bounded-integer-type-p type1))
+        (t2 (bounded-integer-type-p type2)))
+    (when (and t1 t2)
+      (multiple-value-call #'bit-range-ctype
+        (multiple-value-call #'bit-range-of-logxor
+          (bounded-integer-type-bit-range t1)
+          (bounded-integer-type-bit-range t2))))))
+
 (defun bounded-integer-type-for-ash (type1 type2)
   (let* ((t1 (bounded-integer-type-p type1))
          (t2 (if t1 (bounded-integer-type-p type2))))

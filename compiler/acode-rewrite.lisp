@@ -194,6 +194,19 @@
           (t
            (rewrite-acode-form initform)))))
 
+(defun acode-infer-type-via (f &rest args)
+  (ctype-specifier (apply f (mapcar (lambda (arg)
+                                      (if (acode-p arg)
+                                          (progn
+                                            (rewrite-acode-form arg)
+                                            (acode-form-type arg *acode-rewrite-trust-declarations*))
+                                          arg))
+                                    args))))
+
+(defun acode-refine-type (acode type)
+  (when (subtypep type (acode-form-type acode *acode-rewrite-trust-declarations*))
+    (setf (acode.asserted-type acode) type)))
+
 (def-acode-rewrite acode-rewrite-not not asserted-type (&whole w cc form)
   (rewrite-acode-form form)
   (multiple-value-bind (val constantp) (acode-constant-p form)
@@ -629,10 +642,12 @@
               (acode.asserted-type w) nil)))))
 
 (def-acode-rewrite acode-rewrite-logior (logior2 %ilogior2 %natural-logior) asserted-type  (&whole w x y) 
-  (or (acode-constant-fold-numeric-binop  w x y 'logior)
-      (acode-strength-reduce-binop w x y *nx-target-fixnum-type* (%nx1-operator logior2) (%nx1-operator %ilogior2))
-      (acode-strength-reduce-binop w x y *nx-target-natural-type* (%nx1-operator logior2) (%nx1-operator %natural-logior)))
-)
+  (let ((inferred-type (acode-infer-type-via #'bounded-integer-type-for-logior x y)))
+    (or (acode-constant-fold-numeric-binop  w x y 'logior)
+        (acode-strength-reduce-binop w x y *nx-target-fixnum-type* (%nx1-operator logior2) (%nx1-operator %ilogior2))
+        (acode-strength-reduce-binop w x y *nx-target-natural-type* (%nx1-operator logior2) (%nx1-operator %natural-logior)))
+    (when inferred-type
+      (acode-refine-type w inferred-type))))
 
 (defun acode-omit-redundant-masking (w x y)
   (let* ((xconst (acode-xxx-form-p x 'integer))
@@ -693,17 +708,23 @@
                (rewrite (%nx1-operator %natural-lognot) arg)))))))))
 
 (def-acode-rewrite acode-rewrite-logand (logand2 %ilogand2 %natural-logand) asserted-type  (&whole w x y) 
-  (or (acode-constant-fold-numeric-binop  w x y 'logand)
-      (acode-omit-redundant-masking w x y)
-      (acode-rewrite-to-modular-natural-op w x y)
-      (acode-strength-reduce-binop w x y *nx-target-fixnum-type* (%nx1-operator logand2) (%nx1-operator %ilogand2))
-      (acode-strength-reduce-binop w x y *nx-target-natural-type* (%nx1-operator logand2) (%nx1-operator %natural-logand))))
+  (let ((inferred-type (acode-infer-type-via #'bounded-integer-type-for-logand x y)))
+    (or (acode-constant-fold-numeric-binop  w x y 'logand)
+        (acode-omit-redundant-masking w x y)
+        (acode-rewrite-to-modular-natural-op w x y)
+        (acode-strength-reduce-binop w x y *nx-target-fixnum-type* (%nx1-operator logand2) (%nx1-operator %ilogand2))
+        (acode-strength-reduce-binop w x y *nx-target-natural-type* (%nx1-operator logand2) (%nx1-operator %natural-logand)))
+    (when inferred-type
+      (acode-refine-type w inferred-type))))
 
-(def-acode-rewrite acode-rewrite-logxor (logxor2 %ilogxor2 %natural-logxor) asserted-type  (&whole w x y) 
-  (or (acode-constant-fold-numeric-binop  w x y 'logxor)
-      (acode-strength-reduce-binop w x y *nx-target-fixnum-type* (%nx1-operator logxor2) (%nx1-operator %ilogxor2))
-      (acode-strength-reduce-binop w x y *nx-target-natural-type* (%nx1-operator logxor2) (%nx1-operator %natural-logxor))))
-                                   
+(def-acode-rewrite acode-rewrite-logxor (logxor2 %ilogxor2 %natural-logxor) asserted-type  (&whole w x y)
+  (let ((inferred-type (acode-infer-type-via #'bounded-integer-type-for-logxor x y)))
+    (or (acode-constant-fold-numeric-binop  w x y 'logxor)
+        (acode-strength-reduce-binop w x y *nx-target-fixnum-type* (%nx1-operator logxor2) (%nx1-operator %ilogxor2))
+        (acode-strength-reduce-binop w x y *nx-target-natural-type* (%nx1-operator logxor2) (%nx1-operator %natural-logxor)))
+    (when inferred-type
+      (acode-refine-type w inferred-type))))
+
 
     
 (def-acode-rewrite acode-rewrite-%ineg %ineg asserted-type (&whole w x)
