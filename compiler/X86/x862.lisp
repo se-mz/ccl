@@ -1550,24 +1550,27 @@
     (apply (x862-acode-operator-function form) seg vreg xfer args)))
 
 
-(defun x862-form (seg vreg xfer form)
+(defun x862-form (seg vreg xfer form &aux (depth *x862-nfp-depth*))
   (when (eq vreg :push)
     (x862-regmap-note-store nil *x862-vstack*))
   (x86-with-note (form seg)
-    (if (nx-null form)
-      (x862-nil seg vreg xfer)
-      (if (nx-t form)
-        (x862-t seg vreg xfer)
-        (let* ((fn (x862-acode-operator-function form));; also typechecks
-               (op (acode-operator form)))
+    (multiple-value-prog1
+        (if (nx-null form)
+            (x862-nil seg vreg xfer)
+            (if (nx-t form)
+                (x862-t seg vreg xfer)
+                (let* ((fn (x862-acode-operator-function form));; also typechecks
+                       (op (acode-operator form)))
                   
-          (if (and (null vreg)
-                   (%ilogbitp operator-acode-subforms-bit op)
-                   (%ilogbitp operator-assignment-free-bit op)
-                   (%ilogbitp operator-side-effect-free-bit op))
-            (dolist (f (acode-operands form) (x862-branch seg xfer))
-              (x862-form seg nil nil f ))
-            (apply fn seg vreg xfer (acode-operands form))))))))
+                  (if (and (null vreg)
+                           (%ilogbitp operator-acode-subforms-bit op)
+                           (%ilogbitp operator-assignment-free-bit op)
+                           (%ilogbitp operator-side-effect-free-bit op))
+                      (dolist (f (acode-operands form) (x862-branch seg xfer))
+                        (x862-form seg nil nil f ))
+                      (apply fn seg vreg xfer (acode-operands form))))))
+      (when (/= *x862-nfp-depth* depth)
+        (break "depth change!")))))
 
 ;;; dest is a float reg - form is acode
 
