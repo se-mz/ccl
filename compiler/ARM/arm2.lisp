@@ -379,6 +379,7 @@
              (reg nil)
              (nfp-bits 0))
         (cond ((and (subtypep type '(unsigned-byte 32))
+                    nil
                     (not (subtypep type '(signed-byte 30))))
                (setq reg (available-imm-temp
                           *available-backend-imm-temps* :u32)

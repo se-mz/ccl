@@ -430,6 +430,7 @@
              (reg nil)
              (nfp-bits 0))
         (cond ((and (subtypep type *nx-target-natural-type*)
+                    nil
                     (not (subtypep type *nx-target-fixnum-type*)))
                (setq reg (available-imm-temp
                           *available-backend-imm-temps* :natural)
